@@ -65,6 +65,10 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
+func (h HTTP) Address() string {
+	return ":" + h.Port
+}
+
 func (p Postgres) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
