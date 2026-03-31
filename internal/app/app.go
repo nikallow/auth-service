@@ -3,11 +3,17 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	goredis "github.com/redis/go-redis/v9"
+
 	"github.com/nikallow/auth-service/internal/config"
+	postgresstorage "github.com/nikallow/auth-service/internal/storage/postgres"
+	redisstorage "github.com/nikallow/auth-service/internal/storage/redis"
 	httptransport "github.com/nikallow/auth-service/internal/transport/http"
 )
 
@@ -16,6 +22,9 @@ const shutdownTimeout = 10 * time.Second
 type App struct {
 	cfg *config.Config
 	log *slog.Logger
+
+	postgres *pgxpool.Pool
+	redis    *goredis.Client
 }
 
 func New(cfg *config.Config, log *slog.Logger) *App {
@@ -27,6 +36,11 @@ func New(cfg *config.Config, log *slog.Logger) *App {
 
 func (a *App) Run(ctx context.Context) error {
 	a.log.Info("starting application")
+
+	if err := a.initStorage(ctx); err != nil {
+		return err
+	}
+	defer a.closeStorage()
 
 	router := httptransport.NewRouter()
 	server := &http.Server{
@@ -55,7 +69,7 @@ func (a *App) Run(ctx context.Context) error {
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			return err
+			return fmt.Errorf("shutdown http server: %w", err)
 		}
 
 		if err := <-serverErrCh; err != nil {
@@ -63,5 +77,47 @@ func (a *App) Run(ctx context.Context) error {
 		}
 
 		return nil
+	}
+}
+
+func (a *App) initStorage(ctx context.Context) error {
+	postgresLog := a.log.With(slog.String("component", "postgres"))
+	postgresLog.Info("connecting to postgres")
+
+	pg, err := postgresstorage.New(ctx, a.cfg.PG.DSN())
+	if err != nil {
+		return fmt.Errorf("init postgres: %w", err)
+	}
+	a.postgres = pg
+
+	redisLog := a.log.With(slog.String("component", "redis"))
+	redisLog.Info("connecting to redis")
+
+	redisClient, err := redisstorage.New(ctx, redisstorage.Config{
+		Addr:     a.cfg.Redis.Addr,
+		Password: a.cfg.Redis.Password,
+		DB:       a.cfg.Redis.DB,
+	})
+	if err != nil {
+		a.postgres.Close()
+		a.postgres = nil
+
+		return fmt.Errorf("init redis: %w", err)
+	}
+	a.redis = redisClient
+
+	a.log.Info("storage initialized")
+	return nil
+}
+
+func (a *App) closeStorage() {
+	if a.postgres != nil {
+		a.postgres.Close()
+	}
+
+	if a.redis != nil {
+		if err := a.redis.Close(); err != nil {
+			a.log.Warn("close redis client", slog.Any("error", err))
+		}
 	}
 }
