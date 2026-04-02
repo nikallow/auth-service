@@ -45,3 +45,6 @@ migrate-down:
 
 migrate-status:
 	goose -dir ./migrations $(GOOSE_DRIVER) "$(GOOSE_DBSTRING)" status
+
+sqlc-generate:
+	sqlc generate
