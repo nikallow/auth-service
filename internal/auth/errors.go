@@ -9,4 +9,6 @@ var (
 	ErrEmailNotVerified    = errors.New("email is not verified")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrRefreshTokenExpired = errors.New("refresh token expired")
+	ErrInvalidEmail    = errors.New("invalid email")
+	ErrInvalidPassword = errors.New("invalid password")
 )

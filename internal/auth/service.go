@@ -45,8 +45,17 @@ func NewService(
 }
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterResult, error) {
+	email := normalizeEmail(input.Email)
+	if err := validateEmail(email); err != nil {
+		return RegisterResult{}, err
+	}
+
+	if err := validatePassword(input.Password); err != nil {
+		return RegisterResult{}, err
+	}
+
 	existingUser, err := s.queries.GetUserByEmail(ctx, sqlc.GetUserByEmailParams{
-		Email: input.Email,
+		Email: email,
 	})
 	if err == nil {
 		if existingUser.DeletedAt.Valid {
@@ -66,7 +75,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterRe
 	}
 
 	user, err := s.queries.CreateUser(ctx, sqlc.CreateUserParams{
-		Email:        input.Email,
+		Email: email,
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
@@ -103,8 +112,17 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterRe
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (TokenPair, error) {
+	email := normalizeEmail(input.Email)
+	if err := validateEmail(email); err != nil {
+		return TokenPair{}, ErrInvalidCredentials
+	}
+
+	if err := validatePassword(input.Password); err != nil {
+		return TokenPair{}, ErrInvalidCredentials
+	}
+
 	user, err := s.queries.GetActiveUserByEmail(ctx, sqlc.GetActiveUserByEmailParams{
-		Email: input.Email,
+		Email: email,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
