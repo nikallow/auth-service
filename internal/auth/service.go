@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/nikallow/auth-service/internal/otp"
 	sqlc "github.com/nikallow/auth-service/internal/storage/postgres/gen"
 )
@@ -44,7 +45,9 @@ func NewService(
 }
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterResult, error) {
-	existingUser, err := s.queries.GetUserByEmail(ctx, sqlc.GetUserByEmailParams{Email: input.Email})
+	existingUser, err := s.queries.GetUserByEmail(ctx, sqlc.GetUserByEmailParams{
+		Email: input.Email,
+	})
 	if err == nil {
 		if existingUser.DeletedAt.Valid {
 			return RegisterResult{}, ErrUserDeleted
@@ -95,7 +98,6 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterRe
 	return RegisterResult{
 		UserID:                    userID,
 		Email:                     user.Email,
-		EmailVerified:             user.EmailVerified,
 		VerificationCodeExpiresAt: now.Add(s.verificationCodeTTL),
 	}, nil
 }
@@ -112,7 +114,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (TokenPair, error
 		return TokenPair{}, fmt.Errorf("get active user by email: %w", err)
 	}
 
-	if err := s.passwordHasher.Compare(input.Password, user.PasswordHash); err != nil {
+	if err = s.passwordHasher.Compare(input.Password, user.PasswordHash); err != nil {
 		return TokenPair{}, ErrInvalidCredentials
 	}
 
@@ -138,32 +140,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (TokenPair, error
 		return TokenPair{}, fmt.Errorf("create session: %w", err)
 	}
 
-	userID, err := uuidFromPG(user.ID)
-	if err != nil {
-		return TokenPair{}, fmt.Errorf("convert user id: %w", err)
-	}
-
-	sessionID, err := uuidFromPG(session.ID)
-	if err != nil {
-		return TokenPair{}, fmt.Errorf("convert session id: %w", err)
-	}
-
-	accessToken, accessExpiresAt, err := s.tokenManager.NewAccessToken(AccessTokenInput{
-		UserID:    userID.String(),
-		Email:     user.Email,
-		Roles:     []string{"user"},
-		SessionID: sessionID.String(),
-	})
-	if err != nil {
-		return TokenPair{}, fmt.Errorf("generate access token: %w", err)
-	}
-
-	return TokenPair{
-		AccessToken:           accessToken,
-		RefreshToken:          refreshToken,
-		AccessTokenExpiresAt:  accessExpiresAt,
-		RefreshTokenExpiresAt: refreshExpiresAt,
-	}, nil
+	return s.buildTokenPair(user, session.ID, refreshToken, refreshExpiresAt)
 }
 
 func (s *Service) Refresh(ctx context.Context, input RefreshInput) (TokenPair, error) {
@@ -220,32 +197,7 @@ func (s *Service) Refresh(ctx context.Context, input RefreshInput) (TokenPair, e
 		return TokenPair{}, fmt.Errorf("rotate session refresh hash: %w", err)
 	}
 
-	userID, err := uuidFromPG(user.ID)
-	if err != nil {
-		return TokenPair{}, fmt.Errorf("convert user id: %w", err)
-	}
-
-	sessionID, err := uuidFromPG(rotatedSession.ID)
-	if err != nil {
-		return TokenPair{}, fmt.Errorf("convert session id: %w", err)
-	}
-
-	accessToken, accessExpiresAt, err := s.tokenManager.NewAccessToken(AccessTokenInput{
-		UserID:    userID.String(),
-		Email:     user.Email,
-		Roles:     []string{"user"},
-		SessionID: sessionID.String(),
-	})
-	if err != nil {
-		return TokenPair{}, fmt.Errorf("generate access token: %w", err)
-	}
-
-	return TokenPair{
-		AccessToken:           accessToken,
-		RefreshToken:          newRefreshToken,
-		AccessTokenExpiresAt:  accessExpiresAt,
-		RefreshTokenExpiresAt: newRefreshExpiresAt,
-	}, nil
+	return s.buildTokenPair(user, rotatedSession.ID, newRefreshToken, newRefreshExpiresAt)
 }
 
 func (s *Service) Logout(ctx context.Context, input LogoutInput) error {
@@ -282,6 +234,40 @@ func (s *Service) Logout(ctx context.Context, input LogoutInput) error {
 	}
 
 	return nil
+}
+
+func (s *Service) buildTokenPair(
+	user sqlc.User,
+	sessionID pgtype.UUID,
+	refreshToken string,
+	refreshExpiresAt time.Time,
+) (TokenPair, error) {
+	userID, err := uuidFromPG(user.ID)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("convert user id: %w", err)
+	}
+
+	sid, err := uuidFromPG(sessionID)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("convert session id: %w", err)
+	}
+
+	accessToken, accessExpiresAt, err := s.tokenManager.NewAccessToken(AccessTokenInput{
+		UserID:    userID.String(),
+		Email:     user.Email,
+		Roles:     []string{"user"},
+		SessionID: sid.String(),
+	})
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("generate access token: %w", err)
+	}
+
+	return TokenPair{
+		AccessToken:           accessToken,
+		RefreshToken:          refreshToken,
+		AccessTokenExpiresAt:  accessExpiresAt,
+		RefreshTokenExpiresAt: refreshExpiresAt,
+	}, nil
 }
 
 func textValue(value string) pgtype.Text {

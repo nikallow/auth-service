@@ -14,8 +14,6 @@ type RegisterInput struct {
 type RegisterResult struct {
 	UserID                    uuid.UUID
 	Email                     string
-	EmailVerified             bool
-	VerificationCode          string
 	VerificationCodeExpiresAt time.Time
 }
 

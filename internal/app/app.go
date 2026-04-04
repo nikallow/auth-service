@@ -76,6 +76,8 @@ func (a *App) Run(ctx context.Context) error {
 			return err
 		}
 
+		a.log.Info("application stopped")
+
 		return nil
 	}
 }

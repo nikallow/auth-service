@@ -2,25 +2,32 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/joho/godotenv"
+
 	"github.com/nikallow/auth-service/internal/app"
 	"github.com/nikallow/auth-service/internal/config"
 	"github.com/nikallow/auth-service/internal/logger"
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		log.Fatalf("error loading .env: %v", err)
+		fmt.Fprintf(os.Stderr, "load .env: %v\n", err)
+		return 1
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
+		return 1
 	}
 
 	logg := logger.New(cfg)
@@ -32,5 +39,9 @@ func main() {
 
 	if err := application.Run(ctx); err != nil {
 		logg.Error("application stopped with error", "error", err)
+		return 1
 	}
+
+	logg.Info("application stopped")
+	return 0
 }
