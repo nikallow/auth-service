@@ -15,6 +15,10 @@ func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+func normalizeVerificationCode(code string) string {
+	return strings.TrimSpace(code)
+}
+
 func validateEmail(email string) error {
 	if email == "" {
 		return ErrInvalidEmail
@@ -43,6 +47,20 @@ func validatePassword(password string) error {
 
 	if len(password) > maxPasswordBytes {
 		return ErrInvalidPassword
+	}
+
+	return nil
+}
+
+func validateVerificationCode(code string) error {
+	if len(code) != verificationCodeLength {
+		return ErrInvalidVerificationCode
+	}
+
+	for i := 0; i < len(code); i++ {
+		if code[i] < '0' || code[i] > '9' {
+			return ErrInvalidVerificationCode
+		}
 	}
 
 	return nil

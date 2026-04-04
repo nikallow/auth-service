@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"time"
@@ -47,11 +48,11 @@ func NewService(
 func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterResult, error) {
 	email := normalizeEmail(input.Email)
 	if err := validateEmail(email); err != nil {
-		return RegisterResult{}, err
+		return RegisterResult{}, ErrInvalidEmail
 	}
 
 	if err := validatePassword(input.Password); err != nil {
-		return RegisterResult{}, err
+		return RegisterResult{}, ErrInvalidPassword
 	}
 
 	existingUser, err := s.queries.GetUserByEmail(ctx, sqlc.GetUserByEmailParams{
@@ -109,6 +110,63 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterRe
 		Email:                     user.Email,
 		VerificationCodeExpiresAt: now.Add(s.verificationCodeTTL),
 	}, nil
+}
+
+func (s *Service) VerifyEmail(ctx context.Context, input VerifyEmailInput) error {
+	email := normalizeEmail(input.Email)
+	if err := validateEmail(email); err != nil {
+		return ErrInvalidEmail
+	}
+
+	code := normalizeVerificationCode(input.Code)
+	if err := validateVerificationCode(code); err != nil {
+		return ErrInvalidVerificationCode
+	}
+
+	user, err := s.queries.GetUserByEmail(ctx, sqlc.GetUserByEmailParams{
+		Email: email,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+
+		return fmt.Errorf("get user by email: %w", err)
+	}
+
+	if user.DeletedAt.Valid {
+		return ErrUserDeleted
+	}
+
+	if user.EmailVerified {
+		return nil
+	}
+
+	storedCode, err := s.verificationCodeStore.GetVerificationCode(ctx, email)
+	if err != nil {
+		if errors.Is(err, otp.ErrVerificationCodeNotFound) {
+			return ErrVerificationCodeExpired
+		}
+
+		return fmt.Errorf("get verification code: %w", err)
+	}
+
+	if subtle.ConstantTimeCompare([]byte(storedCode.Code), []byte(code)) != 1 {
+		return ErrInvalidVerificationCode
+	}
+
+	_, err = s.queries.MarkEmailVerified(ctx, sqlc.MarkEmailVerifiedParams{
+		ID: user.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("mark email verified: %w", err)
+	}
+
+	if err = s.verificationCodeStore.DeleteVerificationCode(ctx, email); err != nil {
+		return fmt.Errorf("delete verification code: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (TokenPair, error) {

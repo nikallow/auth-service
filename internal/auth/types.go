@@ -17,6 +17,11 @@ type RegisterResult struct {
 	VerificationCodeExpiresAt time.Time
 }
 
+type VerifyEmailInput struct {
+	Email string
+	Code  string
+}
+
 type LoginInput struct {
 	Email     string
 	Password  string
