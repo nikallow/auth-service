@@ -26,6 +26,14 @@ type LoginInput struct {
 	IP        string
 }
 
+type RefreshInput struct {
+	RefreshToken string
+}
+
+type LogoutInput struct {
+	RefreshToken string
+}
+
 type TokenPair struct {
 	AccessToken           string
 	RefreshToken          string

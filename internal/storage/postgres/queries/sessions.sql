@@ -32,9 +32,10 @@ LIMIT 1;
 
 -- name: RotateSessionRefreshHash :one
 UPDATE sessions
-SET refresh_hash = $2
+SET refresh_hash = $2,
+    expires_at   = $3
 WHERE id = $1
-RETURNING *;
+  AND revoked_at IS NULL RETURNING *;
 
 -- name: RevokeSession :one
 UPDATE sessions

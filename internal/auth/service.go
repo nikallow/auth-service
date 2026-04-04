@@ -166,6 +166,124 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (TokenPair, error
 	}, nil
 }
 
+func (s *Service) Refresh(ctx context.Context, input RefreshInput) (TokenPair, error) {
+	if input.RefreshToken == "" {
+		return TokenPair{}, ErrInvalidRefreshToken
+	}
+
+	oldRefreshHash := s.tokenManager.HashRefreshToken(input.RefreshToken)
+
+	session, err := s.queries.GetActiveSessionByRefreshHash(ctx, sqlc.GetActiveSessionByRefreshHashParams{
+		RefreshHash: oldRefreshHash,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TokenPair{}, ErrInvalidRefreshToken
+		}
+
+		return TokenPair{}, fmt.Errorf("get active session by refresh hash: %w", err)
+	}
+
+	now := time.Now().UTC()
+	if !session.ExpiresAt.Valid || !session.ExpiresAt.Time.After(now) {
+		return TokenPair{}, ErrRefreshTokenExpired
+	}
+
+	user, err := s.queries.GetActiveUserByID(ctx, sqlc.GetActiveUserByIDParams{
+		ID: session.UserID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TokenPair{}, ErrInvalidRefreshToken
+		}
+
+		return TokenPair{}, fmt.Errorf("get active user by id: %w", err)
+	}
+
+	newRefreshToken, newRefreshExpiresAt, err := s.tokenManager.NewRefreshToken()
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("generate new refresh token: %w", err)
+	}
+
+	newRefreshHash := s.tokenManager.HashRefreshToken(newRefreshToken)
+
+	rotatedSession, err := s.queries.RotateSessionRefreshHash(ctx, sqlc.RotateSessionRefreshHashParams{
+		ID:          session.ID,
+		RefreshHash: newRefreshHash,
+		ExpiresAt:   timestamptzValue(newRefreshExpiresAt),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TokenPair{}, ErrInvalidRefreshToken
+		}
+
+		return TokenPair{}, fmt.Errorf("rotate session refresh hash: %w", err)
+	}
+
+	userID, err := uuidFromPG(user.ID)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("convert user id: %w", err)
+	}
+
+	sessionID, err := uuidFromPG(rotatedSession.ID)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("convert session id: %w", err)
+	}
+
+	accessToken, accessExpiresAt, err := s.tokenManager.NewAccessToken(AccessTokenInput{
+		UserID:    userID.String(),
+		Email:     user.Email,
+		Roles:     []string{"user"},
+		SessionID: sessionID.String(),
+	})
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("generate access token: %w", err)
+	}
+
+	return TokenPair{
+		AccessToken:           accessToken,
+		RefreshToken:          newRefreshToken,
+		AccessTokenExpiresAt:  accessExpiresAt,
+		RefreshTokenExpiresAt: newRefreshExpiresAt,
+	}, nil
+}
+
+func (s *Service) Logout(ctx context.Context, input LogoutInput) error {
+	if input.RefreshToken == "" {
+		return ErrInvalidRefreshToken
+	}
+
+	refreshHash := s.tokenManager.HashRefreshToken(input.RefreshToken)
+
+	session, err := s.queries.GetSessionByRefreshHash(ctx, sqlc.GetSessionByRefreshHashParams{
+		RefreshHash: refreshHash,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidRefreshToken
+		}
+
+		return fmt.Errorf("get session by refresh hash: %w", err)
+	}
+
+	if session.RevokedAt.Valid {
+		return nil
+	}
+
+	_, err = s.queries.RevokeSession(ctx, sqlc.RevokeSessionParams{
+		ID: session.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidRefreshToken
+		}
+
+		return fmt.Errorf("revoke session: %w", err)
+	}
+
+	return nil
+}
+
 func textValue(value string) pgtype.Text {
 	if value == "" {
 		return pgtype.Text{}

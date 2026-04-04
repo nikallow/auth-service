@@ -183,18 +183,21 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (S
 
 const rotateSessionRefreshHash = `-- name: RotateSessionRefreshHash :one
 UPDATE sessions
-SET refresh_hash = $2
+SET refresh_hash = $2,
+    expires_at   = $3
 WHERE id = $1
-RETURNING id, user_id, refresh_hash, expires_at, revoked_at, created_at, user_agent, ip
+  AND revoked_at IS NULL
+    RETURNING id, user_id, refresh_hash, expires_at, revoked_at, created_at, user_agent, ip
 `
 
 type RotateSessionRefreshHashParams struct {
-	ID          pgtype.UUID `db:"id" json:"id"`
-	RefreshHash string      `db:"refresh_hash" json:"refresh_hash"`
+	ID          pgtype.UUID        `db:"id" json:"id"`
+	RefreshHash string             `db:"refresh_hash" json:"refresh_hash"`
+	ExpiresAt   pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 }
 
 func (q *Queries) RotateSessionRefreshHash(ctx context.Context, arg RotateSessionRefreshHashParams) (Session, error) {
-	row := q.db.QueryRow(ctx, rotateSessionRefreshHash, arg.ID, arg.RefreshHash)
+	row := q.db.QueryRow(ctx, rotateSessionRefreshHash, arg.ID, arg.RefreshHash, arg.ExpiresAt)
 	var i Session
 	err := row.Scan(
 		&i.ID,
