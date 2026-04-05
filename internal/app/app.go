@@ -11,8 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 
+	"github.com/nikallow/auth-service/internal/auth"
 	"github.com/nikallow/auth-service/internal/config"
 	postgresstorage "github.com/nikallow/auth-service/internal/storage/postgres"
+	sqlc "github.com/nikallow/auth-service/internal/storage/postgres/gen"
 	redisstorage "github.com/nikallow/auth-service/internal/storage/redis"
 	httptransport "github.com/nikallow/auth-service/internal/transport/http"
 )
@@ -42,7 +44,22 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	defer a.closeStorage()
 
-	router := httptransport.NewRouter()
+	queries := sqlc.New(a.postgres)
+	passwordHasher := auth.NewPasswordHasher()
+	tokenManager := auth.NewTokenManager(a.cfg.JWT, a.cfg.Service.Name)
+	verificationCodeStore := redisstorage.NewVerificationCodeStore(a.redis)
+
+	authService := auth.NewService(
+		queries,
+		passwordHasher,
+		tokenManager,
+		verificationCodeStore,
+		0,
+	)
+
+	handler := httptransport.NewHandler(authService, a.cfg.HTTP.SecureCookies)
+	router := httptransport.NewRouter(handler)
+
 	server := &http.Server{
 		Addr:    a.cfg.HTTP.Address(),
 		Handler: router,

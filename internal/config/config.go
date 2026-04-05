@@ -27,7 +27,8 @@ type Logger struct {
 }
 
 type HTTP struct {
-	Port string `env:"PORT" env-default:"8000"`
+	Port          string `env:"PORT" env-default:"8000"`
+	SecureCookies bool   `env:"SECURE_COOKIES" env-default:"false"`
 }
 
 type GRPC struct {

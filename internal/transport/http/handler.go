@@ -1,17 +1,17 @@
 package httptransport
 
 import (
-	"net/http"
+	"github.com/nikallow/auth-service/internal/auth"
 )
 
-type Handler struct{}
-
-func NewHandler() *Handler {
-	return &Handler{}
+type Handler struct {
+	authService         *auth.Service
+	refreshCookieSecure bool
 }
 
-func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "ok",
-	})
+func NewHandler(authService *auth.Service, refreshCookieSecure bool) *Handler {
+	return &Handler{
+		authService:         authService,
+		refreshCookieSecure: refreshCookieSecure,
+	}
 }
