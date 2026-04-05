@@ -16,6 +16,7 @@ INSERT INTO users (email,
                    password_hash)
 VALUES ($1,
         $2)
+ON CONFLICT (email) DO NOTHING
 RETURNING id, email, password_hash, email_verified, created_at, updated_at, deleted_at
 `
 

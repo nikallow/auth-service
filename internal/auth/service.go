@@ -55,21 +55,6 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterRe
 		return RegisterResult{}, ErrInvalidPassword
 	}
 
-	existingUser, err := s.queries.GetUserByEmail(ctx, sqlc.GetUserByEmailParams{
-		Email: email,
-	})
-	if err == nil {
-		if existingUser.DeletedAt.Valid {
-			return RegisterResult{}, ErrUserDeleted
-		}
-
-		return RegisterResult{}, ErrUserAlreadyExists
-	}
-
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return RegisterResult{}, fmt.Errorf("get user by email: %w", err)
-	}
-
 	passwordHash, err := s.passwordHasher.Hash(input.Password)
 	if err != nil {
 		return RegisterResult{}, fmt.Errorf("hash password: %w", err)
@@ -80,6 +65,9 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (RegisterRe
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RegisterResult{}, ErrUserAlreadyExists
+		}
 		return RegisterResult{}, fmt.Errorf("create user: %w", err)
 	}
 

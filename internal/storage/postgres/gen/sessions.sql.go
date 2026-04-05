@@ -186,8 +186,7 @@ UPDATE sessions
 SET refresh_hash = $2,
     expires_at   = $3
 WHERE id = $1
-  AND revoked_at IS NULL
-    RETURNING id, user_id, refresh_hash, expires_at, revoked_at, created_at, user_agent, ip
+  AND revoked_at IS NULL RETURNING id, user_id, refresh_hash, expires_at, revoked_at, created_at, user_agent, ip
 `
 
 type RotateSessionRefreshHashParams struct {
