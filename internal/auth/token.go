@@ -22,16 +22,18 @@ type TokenManager struct {
 }
 
 type AccessTokenInput struct {
-	UserID    string
-	Email     string
-	Roles     []string
-	SessionID string
+	UserID        string
+	Email         string
+	Roles         []string
+	SessionID     string
+	EmailVerified bool
 }
 
 type AccessTokenClaims struct {
-	Email     string   `json:"email"`
-	Roles     []string `json:"roles"`
-	SessionID string   `json:"sid"`
+	Email         string   `json:"email"`
+	Roles         []string `json:"roles"`
+	SessionID     string   `json:"sid"`
+	EmailVerified bool     `json:"email_verified"`
 
 	jwt.RegisteredClaims
 }
@@ -50,9 +52,10 @@ func (m *TokenManager) NewAccessToken(input AccessTokenInput) (string, time.Time
 	expiresAt := now.Add(m.accessTTL)
 
 	claims := AccessTokenClaims{
-		Email:     input.Email,
-		Roles:     input.Roles,
-		SessionID: input.SessionID,
+		Email:         input.Email,
+		Roles:         input.Roles,
+		SessionID:     input.SessionID,
+		EmailVerified: input.EmailVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
 			Subject:   input.UserID,
@@ -80,6 +83,10 @@ func (m *TokenManager) ParseAccessToken(tokenString string) (*AccessTokenClaims,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse access token: %w", err)
+	}
+
+	if !token.Valid {
+		return nil, fmt.Errorf("parse access token: token is invalid")
 	}
 
 	claims, ok := token.Claims.(*AccessTokenClaims)

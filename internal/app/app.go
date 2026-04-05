@@ -57,7 +57,7 @@ func (a *App) Run(ctx context.Context) error {
 		0,
 	)
 
-	handler := httptransport.NewHandler(authService, a.cfg.HTTP.SecureCookies)
+	handler := httptransport.NewHandler(authService, tokenManager, a.cfg.HTTP.SecureCookies)
 	router := httptransport.NewRouter(handler)
 
 	server := &http.Server{

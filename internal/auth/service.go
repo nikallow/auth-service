@@ -329,10 +329,11 @@ func (s *Service) buildTokenPair(
 	}
 
 	accessToken, accessExpiresAt, err := s.tokenManager.NewAccessToken(AccessTokenInput{
-		UserID:    userID.String(),
-		Email:     user.Email,
-		Roles:     []string{"user"},
-		SessionID: sid.String(),
+		UserID:        userID.String(),
+		Email:         user.Email,
+		Roles:         []string{"user"},
+		SessionID:     sid.String(),
+		EmailVerified: user.EmailVerified,
 	})
 	if err != nil {
 		return TokenPair{}, fmt.Errorf("generate access token: %w", err)

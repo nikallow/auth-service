@@ -151,3 +151,18 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Message: "session revoked",
 	})
 }
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	claims, ok := accessTokenClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "access token claims not found in context")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, meResponse{
+		ID:            claims.Subject,
+		Email:         claims.Email,
+		Roles:         claims.Roles,
+		EmailVerified: claims.EmailVerified,
+	})
+}

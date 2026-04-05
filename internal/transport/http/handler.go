@@ -1,17 +1,15 @@
 package httptransport
 
-import (
-	"github.com/nikallow/auth-service/internal/auth"
-)
-
 type Handler struct {
-	authService         *auth.Service
+	authService AuthService
+	tokenParser AccessTokenParser
 	refreshCookieSecure bool
 }
 
-func NewHandler(authService *auth.Service, refreshCookieSecure bool) *Handler {
+func NewHandler(authService AuthService, tokenParser AccessTokenParser, refreshCookieSecure bool) *Handler {
 	return &Handler{
 		authService:         authService,
+		tokenParser: tokenParser,
 		refreshCookieSecure: refreshCookieSecure,
 	}
 }

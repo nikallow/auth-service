@@ -22,6 +22,7 @@ func NewRouter(handler *Handler) http.Handler {
 			r.Post("/login", handler.Login)
 			r.Post("/refresh", handler.Refresh)
 			r.Post("/logout", handler.Logout)
+			r.With(handler.RequireAccessToken).Get("/me", handler.Me)
 		})
 	})
 

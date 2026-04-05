@@ -1,6 +1,7 @@
 package httptransport
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -34,4 +35,26 @@ func clientIP(r *http.Request) string {
 	}
 
 	return r.RemoteAddr
+}
+
+func bearerTokenFromRequest(r *http.Request) (string, error) {
+	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
+	if authorization == "" {
+		return "", errors.New("authorization header is empty")
+	}
+
+	parts := strings.Fields(authorization)
+	if len(parts) != 2 {
+		return "", errors.New("authorization header format is invalid")
+	}
+
+	if !strings.EqualFold(parts[0], "Bearer") {
+		return "", errors.New("authorization scheme is invalid")
+	}
+
+	if parts[1] == "" {
+		return "", errors.New("bearer token is empty")
+	}
+
+	return parts[1], nil
 }

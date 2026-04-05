@@ -64,6 +64,13 @@ type tokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
+type meResponse struct {
+	ID            string   `json:"id"`
+	Email         string   `json:"email"`
+	Roles         []string `json:"roles"`
+	EmailVerified bool     `json:"email_verified"`
+}
+
 type messageResponse struct {
 	Message string `json:"message"`
 }
